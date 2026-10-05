@@ -1,0 +1,14 @@
+{
+  "name": "agent-canvas",
+  "version": "0.1.0",
+  "description": "CNVS-style multi-agent canvas: Claude Code orchestrator + parallel haiku workers on an infinite canvas",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "doctor": "node scripts/doctor.js",
+    "mock": "CANVAS_MOCK=1 node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

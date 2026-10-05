@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>agent-canvas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div id="viewport">
+  <div id="world"></div>
+</div>
+
+<div id="zoombar">
+  <button id="zoom-fit" title="全体が収まるように表示">全体</button>
+  <button id="zoom-out" title="縮小">−</button>
+  <span id="zoom-label">100%</span>
+  <button id="zoom-in" title="拡大">+</button>
+</div>
+
+<div id="composer">
+  <span class="dot"></span>
+  <input id="prompt" type="text" placeholder="Forest に指示 — 例: 4体のエージェントでこのコードベースを深掘りして"
+         autocomplete="off">
+  <span id="progress" hidden></span>
+  <span id="fix-progress" hidden></span>
+  <button id="fix-reopen" type="button" hidden></button>
+  <span id="cost-chip" title="この実行で使った費用(API従量課金に換算した額)"></span>
+  <button id="target-label" type="button" title="調べる対象を選ぶ・登録する"></button>
+  <button id="history-btn" type="button" title="過去のリサーチ結果と費用">履歴</button>
+</div>
+
+<div id="history-panel" hidden>
+  <header>
+    <span>リサーチ履歴</span>
+    <label class="rate mock-toggle"><input id="show-mock" type="checkbox"> モックの実行も表示</label>
+    <label class="rate">1ドル = <input id="usd-jpy" type="number" min="1" step="1"> 円で換算</label>
+    <button id="history-close" type="button" aria-label="閉じる">×</button>
+  </header>
+  <div class="history-body">
+    <ul id="runs-list"></ul>
+    <div id="run-detail"><p class="hint">左の一覧から実行を選ぶと、費用の内訳とレポートを表示します。</p></div>
+  </div>
+</div>
+
+<div id="targets-panel" hidden>
+  <header>
+    <span>調べる対象</span>
+    <button id="targets-close" type="button" aria-label="閉じる">×</button>
+  </header>
+  <ul id="targets-list"></ul>
+  <form id="targets-form">
+    <div class="path-row">
+      <input id="target-path" type="text" placeholder="/Users/you/projects/my-app (絶対パス)" autocomplete="off" required>
+      <button id="target-pick" type="button" title="Mac のフォルダ選択画面から選ぶ" hidden>フォルダを選ぶ…</button>
+    </div>
+    <input id="target-name" type="text" placeholder="表示名(省略時はフォルダ名)" autocomplete="off">
+    <div class="form-actions">
+      <button id="target-add" type="button" class="secondary" title="一覧に加えるだけ(対象は切り替えません)">登録</button>
+      <button id="target-add-select" type="submit" class="primary">登録して、この対象にする</button>
+    </div>
+  </form>
+  <p id="targets-msg"></p>
+</div>
+
+<div id="fix-backdrop" class="fix-backdrop" hidden></div>
+
+<div id="fix-proposal" class="fix-modal" role="dialog" aria-modal="true" aria-labelledby="fix-proposal-title" hidden>
+  <header>
+    <span id="fix-proposal-title"></span>
+    <button class="fix-x" type="button" aria-label="閉じる">×</button>
+  </header>
+  <div class="fix-body">
+    <ul id="fix-findings"></ul>
+    <fieldset class="fix-models">
+      <legend>修正係のモデル</legend>
+      <label><input type="radio" name="fix-model" value="opus" checked> Opus（推奨・判断が要る修正向け）</label>
+      <label><input type="radio" name="fix-model" value="sonnet"> Sonnet（安い・速い）</label>
+    </fieldset>
+    <p class="fix-note">修正は対象リポジトリとは別の作業場所（git worktree）と新しいブランチで行います。push はしません。対象に未コミットの変更がある場合、修正係からは見えません。</p>
+    <p id="fix-proposal-msg" class="fix-msg" role="alert"></p>
+  </div>
+  <footer>
+    <button id="fix-skip" type="button" class="secondary">今回はしない</button>
+    <button id="fix-start" type="button" class="primary">選んだ指摘を修正係に渡す</button>
+  </footer>
+</div>
+
+<div id="fix-result" class="fix-modal" role="dialog" aria-modal="true" aria-labelledby="fix-result-title" hidden>
+  <header>
+    <span id="fix-result-title"></span>
+    <button class="fix-x" type="button" aria-label="閉じる">×</button>
+  </header>
+  <div class="fix-body" id="fix-result-body"></div>
+  <footer>
+    <p id="fix-result-msg" class="fix-msg" role="alert"></p>
+    <button id="fix-close" type="button" class="primary">閉じる</button>
+  </footer>
+</div>
+
+<div id="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>
