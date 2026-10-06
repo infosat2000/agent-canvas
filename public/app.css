@@ -93,7 +93,7 @@ html, body {
   font-size: 16px; cursor: pointer; padding: 0 4px;
 }
 #zoombar button:disabled { opacity: .35; cursor: not-allowed; }
-#zoom-label.disabled { opacity: .45; }
+#zoombar #zoom-label { font-size: 12px; min-width: 3.2em; font-variant-numeric: tabular-nums; }
 
 #composer {
   position: fixed;

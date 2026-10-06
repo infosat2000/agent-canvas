@@ -30,8 +30,46 @@ viewport.addEventListener('mousedown', (e) => {
 });
 
 function zoomBy(f) { if (!paneEls.size) return; userViewed = true; view.scale = Math.min(2, Math.max(0.3, view.scale * f)); applyView(); }
-document.getElementById('zoom-in').onclick = () => zoomBy(1.15);
-document.getElementById('zoom-out').onclick = () => zoomBy(1 / 1.15);
+// +/− ボタンは 100% を通る決まった段階を上下する(掛け算だと 86%→99%→114% と半端になり 100% に戻れない)
+const ZOOM_STEPS = [0.3, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+// 全ペインを囲む範囲(キャンバス上の座標)
+function paneBounds() {
+  let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity;
+  for (const { el } of paneEls.values()) {
+    const x = parseFloat(el.style.left); const y = parseFloat(el.style.top);
+    minX = Math.min(minX, x); minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x + el.offsetWidth); maxY = Math.max(maxY, y + el.offsetHeight);
+  }
+  return { minX, minY, maxX, maxY };
+}
+// 横幅が画面に収まる倍率なら左右の中央に置く(左に寄って右が空くのを防ぐ)
+function centerIfFits(b) {
+  const w = (b.maxX - b.minX) * view.scale;
+  if (w <= viewport.clientWidth - 48) view.x = (viewport.clientWidth - w) / 2 - b.minX * view.scale;
+}
+// 倍率を変える。基準はペイン全体の左上(画面の中央を基準にすると、左寄せの全体表示から拡大したとき左が切れた)。
+// reset のときは起動直後と同じ、左上をそろえた表示にする
+function zoomTo(scale, reset = false) {
+  if (!paneEls.size) return;
+  userViewed = true;
+  const b = paneBounds();
+  const sx = reset ? 24 : view.x + b.minX * view.scale;
+  const sy = reset ? 24 : view.y + b.minY * view.scale;
+  view.scale = scale;
+  view.x = sx - b.minX * scale;
+  view.y = sy - b.minY * scale;
+  centerIfFits(b);
+  applyView();
+}
+function zoomStep(dir) {
+  // 今の倍率とほぼ同じ段階(差3%未満。例: 全体表示の66%から67%)は飛ばす。押しても変わらないように見えるため
+  const cur = view.scale;
+  const next = dir > 0 ? ZOOM_STEPS.find((v) => v > cur * 1.03) : [...ZOOM_STEPS].reverse().find((v) => v < cur / 1.03);
+  if (next !== undefined) zoomTo(next);
+}
+document.getElementById('zoom-in').onclick = () => zoomStep(1);
+document.getElementById('zoom-out').onclick = () => zoomStep(-1);
+zoomLabel.onclick = () => zoomTo(1, true);
 viewport.addEventListener('wheel', (e) => {
   if (e.ctrlKey || e.metaKey) {
     e.preventDefault();
@@ -50,19 +88,15 @@ viewport.addEventListener('wheel', (e) => {
 
 // 全ペインが画面に収まる倍率と位置にする
 function fitAll() {
-  const els = [...paneEls.values()].map((e) => e.el);
-  if (!els.length) return;
-  let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity;
-  for (const el of els) {
-    const x = parseFloat(el.style.left); const y = parseFloat(el.style.top);
-    minX = Math.min(minX, x); minY = Math.min(minY, y);
-    maxX = Math.max(maxX, x + el.offsetWidth); maxY = Math.max(maxY, y + el.offsetHeight);
-  }
+  if (!paneEls.size) return;
+  const b = paneBounds();
+  const { minX, minY, maxX, maxY } = b;
   const availW = viewport.clientWidth - 48;
   const availH = viewport.clientHeight - 24 - bottomReserve(); // 下部バーの分を空ける
   view.scale = Math.max(0.3, Math.min(1, availW / (maxX - minX), availH / (maxY - minY)));
   view.x = 24 - minX * view.scale;
   view.y = 24 - minY * view.scale;
+  centerIfFits(b);
   applyView();
 }
 document.getElementById('zoom-fit').onclick = fitAll;
@@ -71,9 +105,11 @@ document.getElementById('zoom-fit').onclick = fitAll;
 // 1画面に5枚(Forest+4体)が収まるよう、画面の幅と高さからペインの大きさを決める。
 //   広い(>=1100px): 左に縦長の Forest、右にワーカーを2列
 //   中(>=700px)   : 上に横長の Forest、下にワーカーを2列
+// 修正係(Fixer)はワーカーではなく Forest と同じ幅の枠に置く(広い画面では左の列を上下に分ける)
 //   狭い          : 1列に縦積み(ホイールで上下に移動)
 // 手でドラッグしたペインは位置を保つ。
-const ORDER = ['Forest', 'Oak', 'Cedar', 'Pine', 'Maple'];
+const ORDER = ['Forest', 'Fixer', 'Oak', 'Cedar', 'Pine', 'Maple'];
+const LEADS = ['Forest', 'Fixer'];
 const GAP = 16;
 const MARGIN = 24;
 const MIN_H = 220;
@@ -89,8 +125,9 @@ function layoutPanes() {
     const ia = ORDER.indexOf(a); const ib = ORDER.indexOf(b);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
   });
-  const lead = names.includes('Forest') ? 'Forest' : null;
-  const workers = names.filter((n) => n !== lead);
+  const leads = LEADS.filter((n) => names.includes(n));
+  const lead = leads.length ? leads[0] : null;
+  const workers = names.filter((n) => !leads.includes(n));
   const place = (name, x, y, pw, ph) => {
     const e = paneEls.get(name);
     e.layoutH = ph;
@@ -107,14 +144,17 @@ function layoutPanes() {
     const ww = Math.floor((w - restX - (cols - 1) * GAP) / cols);
     const rows = Math.max(1, Math.ceil(workers.length / cols));
     const wh = Math.max(MIN_H, Math.floor((availH - (rows - 1) * GAP) / rows));
-    if (lead) place(lead, 0, 0, leadW, Math.max(availH, wh));
+    if (lead) {
+      const lh = Math.floor((Math.max(availH, wh) - (leads.length - 1) * GAP) / leads.length);
+      leads.forEach((n, i) => place(n, 0, i * (lh + GAP), leadW, lh));
+    }
     workers.forEach((n, i) => place(n, restX + (i % cols) * (ww + GAP), Math.floor(i / cols) * (wh + GAP), ww, wh));
   } else if (w >= 700 - MARGIN * 2) {
-    const rows = (lead ? 1 : 0) + Math.ceil(workers.length / 2);
+    const rows = leads.length + Math.ceil(workers.length / 2);
     const ph = Math.max(MIN_H, Math.floor((availH - (rows - 1) * GAP) / Math.max(1, rows)));
     const ww = Math.floor((w - GAP) / 2);
     let y = 0;
-    if (lead) { place(lead, 0, 0, w, ph); y = ph + GAP; }
+    leads.forEach((n) => { place(n, 0, y, w, ph); y += ph + GAP; });
     workers.forEach((n, i) => place(n, (i % 2) * (ww + GAP), y + Math.floor(i / 2) * (ph + GAP), ww, ph));
   } else {
     const ph = Math.max(MIN_H, Math.min(360, availH));
@@ -158,7 +198,7 @@ window.addEventListener('resize', () => {
 const paneEls = new Map(); // name -> {el, body}
 
 // ペインが0枚のときはズーム操作を無効化(背景は拡大縮小されず数字だけ変わって紛らわしいため)
-const zoomBtns = ['zoom-fit', 'zoom-out', 'zoom-in'].map((id) => document.getElementById(id));
+const zoomBtns = ['zoom-fit', 'zoom-out', 'zoom-label', 'zoom-in'].map((id) => document.getElementById(id));
 for (const b of zoomBtns) b.dataset.title = b.title;
 function updateZoomEnabled() {
   const empty = paneEls.size === 0;
@@ -166,7 +206,6 @@ function updateZoomEnabled() {
     b.disabled = empty;
     b.title = empty ? 'エージェントのペインが表示されると使えます' : b.dataset.title;
   }
-  zoomLabel.classList.toggle('disabled', empty);
 }
 updateZoomEnabled();
 
@@ -238,7 +277,7 @@ function ensurePane(p) {
 
 function setPaneStatus(entry, status) {
   entry.status = status;
-  entry.el.className = `pane ${status}${entry.expanded ? ' expanded' : ' collapsed'}${entry.el.dataset.name === 'Forest' ? ' lead' : ''}`;
+  entry.el.className = `pane ${status}${entry.expanded ? ' expanded' : ' collapsed'}${LEADS.includes(entry.el.dataset.name) ? ' lead' : ''}`;
 }
 
 // 既定は最新の数行だけ表示(Forest は今のターン=統合レビューを丸ごと表示)。全文表示中は手前に出して高さを広げる
